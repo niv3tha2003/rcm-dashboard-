@@ -57,29 +57,49 @@ function getApplicabilityConfig(val) {
 
 // ─── CSV Parser ──────────────────────────────────────────────────
 function parseCSV(text) {
+  // Robust CSV parser that handles multi-line cells, embedded quotes, newlines
   const rows = [];
-  let current = "";
-  let inQuotes = false;
-  for (const line of text.split("\n")) {
-    if (inQuotes) {
-      current += "\n" + line;
-      if ((line.match(/"/g) || []).length % 2 === 1) { inQuotes = false; rows.push(current); current = ""; }
-    } else {
-      if ((line.match(/"/g) || []).length % 2 === 1) { inQuotes = true; current = line; }
-      else rows.push(line);
+  let i = 0;
+  const len = text.length;
+
+  while (i < len) {
+    const row = [];
+    // Parse each cell in the row
+    while (i < len) {
+      let cell = "";
+      if (text[i] === '"') {
+        // Quoted cell — read until closing quote
+        i++; // skip opening quote
+        while (i < len) {
+          if (text[i] === '"') {
+            if (i + 1 < len && text[i + 1] === '"') {
+              cell += '"'; i += 2; // escaped quote
+            } else {
+              i++; // closing quote
+              break;
+            }
+          } else {
+            cell += text[i]; i++;
+          }
+        }
+        // Skip to comma or end of line
+        while (i < len && text[i] !== ',' && text[i] !== '\n' && text[i] !== '\r') i++;
+      } else {
+        // Unquoted cell — read until comma or newline
+        while (i < len && text[i] !== ',' && text[i] !== '\n' && text[i] !== '\r') {
+          cell += text[i]; i++;
+        }
+      }
+      row.push(cell.trim());
+      if (i < len && text[i] === ',') { i++; continue; } // next cell
+      break; // end of row
     }
+    // Skip line endings
+    if (i < len && text[i] === '\r') i++;
+    if (i < len && text[i] === '\n') i++;
+    if (row.length > 1 || (row.length === 1 && row[0])) rows.push(row);
   }
-  return rows.filter(r => r.trim()).map(row => {
-    const cells = []; let cell = ""; let q = false;
-    for (let i = 0; i < row.length; i++) {
-      const ch = row[i];
-      if (ch === '"') q = !q;
-      else if (ch === "," && !q) { cells.push(cell.trim()); cell = ""; }
-      else cell += ch;
-    }
-    cells.push(cell.trim());
-    return cells;
-  });
+  return rows;
 }
 
 function parseDate(val) {
